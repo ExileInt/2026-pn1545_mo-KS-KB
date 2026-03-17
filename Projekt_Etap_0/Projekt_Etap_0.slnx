@@ -1,7 +1,13 @@
 <Solution>
   <Project Path="Data/Data.csproj" />
-  <Project Path="Logic/Logic.csproj" />
-  <Project Path="Model/Model.csproj" />
-  <Project Path="View/View.csproj" />
-  <Project Path="ViewModel/ViewModel.csproj" />
+  <Project Path="Logic/Logic.csproj">
+    <BuildDependency Project="Data/Data.csproj" />
+  </Project>
+  <Project Path="Presentation/Presentation.csproj" Id="c28b5872-5e15-4e7b-9c9e-ebebc17e4ca3">
+    <BuildDependency Project="Logic/Logic.csproj" />
+  </Project>
+  <Project Path="Tests/Tests.csproj" Id="fd1346d8-9cac-4248-8d00-4100999025ab">
+    <BuildDependency Project="Data/Data.csproj" />
+    <BuildDependency Project="Logic/Logic.csproj" />
+  </Project>
 </Solution>

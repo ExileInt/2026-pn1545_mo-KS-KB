@@ -1,0 +1,22 @@
+﻿<Window x:Class="Presentation.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:Presentation"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="450" Width="800">
+    <Grid Background="#FF313131">
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10">
+            <Label Content="Podaj liczbę kul:" HorizontalAlignment="Left" VerticalAlignment="Center" FontSize="24"/>
+            <TextBox Name="BallsCountTextBox" HorizontalAlignment="Left" VerticalAlignment="Center" FontSize="24" Width="200"/>
+            <Button Name="StartButton" Content="Start" Width="100" Height="40" Margin="50,0,10,0" Command="{Binding StartCommand}"/>
+            <Button Name="StopButton" Content="Stop" Width="100" Height="40"/>
+        </StackPanel>
+        <Border BorderBrush="DarkGray" BorderThickness="10" Width="550" Height="300">
+            <Canvas Width="530" Height="280" HorizontalAlignment="Center" VerticalAlignment="Center" Background="#FF155843">
+                <Ellipse HorizontalAlignment="Center" VerticalAlignment="Center" Height="30" Width="30" Fill="White"/>
+            </Canvas>
+        </Border>
+    </Grid>
+</Window>
