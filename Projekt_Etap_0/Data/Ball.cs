@@ -1,23 +1,38 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Numerics;
 using System.Text;
 
 namespace Data
 {
-    public class Ball
+    public class Ball : INotifyPropertyChanged
     {
-        private double _radius { get; set; }
+        private readonly int _radius = 3;
+
+        public event PropertyChangedEventHandler PropertyChanged;
+
         private Vector2 _position { get; set; }
 
-        public Ball(double radius, Vector2 position)
+        public Ball(Vector2 position)
         {
-            _radius = radius;
+            if (position.X < _radius || position.Y < _radius || position.X > (530 - _radius) || position.Y > (280 - _radius))
+                throw new ArgumentException("Position cannot be negative");
             _position = position;
         }
 
-        public double Radius { get { return _radius; } }
-
-        public Vector2 Position { get { return _position; } }
+        public Vector2 Position 
+        {
+            get { return _position; } 
+            set 
+            {
+                if (value.X < _radius || value.Y < _radius || value.X > (530 - _radius) || value.Y > (280 - _radius))
+                {
+                    throw new ArgumentException("Position cannot be negative");
+                }
+                _position = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Position"));
+            }
+        }
     }
 }

@@ -16,10 +16,9 @@ namespace Presentation
     /// </summary>
     public partial class MainWindow : Window
     {
-        public MainWindow()
+        public MainWindow(ViewModel viewModel)
         {
             InitializeComponent();
-            ViewModel viewModel = new ViewModel();
             DataContext = viewModel;
         }
     }

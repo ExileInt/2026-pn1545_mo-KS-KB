@@ -1,11 +1,25 @@
-﻿using System;
+﻿using Data;
+using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Text;
 
 namespace Logic
 {
-    internal interface ISimulation
+
+    public interface IBall : INotifyPropertyChanged
     {
-        void Start();
+        double X { get; }
+        double Y { get; }
+        double Diameter { get; }
     }
+
+    public interface ISimulation
+    {
+        ObservableCollection<IBall> Balls { get; }
+        void Start();
+
+    }
+    
 }

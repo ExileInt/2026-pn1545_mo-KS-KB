@@ -10,9 +10,8 @@ namespace Tests
         [TestMethod]
         public void BallGetsCreatedTest()
         {
-            Ball ball = new Ball(5, new Vector2(5,5));
+            Ball ball = new Ball(new Vector2(5,5));
             Assert.IsNotNull(ball);
-            Assert.AreEqual(5, ball.Radius);
             Assert.AreEqual(new Vector2(5, 5), ball.Position);
         }
     }

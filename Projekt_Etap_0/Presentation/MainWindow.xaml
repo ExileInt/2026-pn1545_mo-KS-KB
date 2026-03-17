@@ -13,10 +13,32 @@
             <Button Name="StartButton" Content="Start" Width="100" Height="40" Margin="50,0,10,0" Command="{Binding StartCommand}"/>
             <Button Name="StopButton" Content="Stop" Width="100" Height="40"/>
         </StackPanel>
-        <Border BorderBrush="DarkGray" BorderThickness="10" Width="550" Height="300">
-            <Canvas Width="530" Height="280" HorizontalAlignment="Center" VerticalAlignment="Center" Background="#FF155843">
-                <Ellipse HorizontalAlignment="Center" VerticalAlignment="Center" Height="30" Width="30" Fill="White"/>
-            </Canvas>
+        <Border BorderBrush="DarkGray" BorderThickness="10" Width="580" Height="300" 
+                HorizontalAlignment="Center" VerticalAlignment="Center">
+
+            <ItemsControl ItemsSource="{Binding Balls}">
+
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <Canvas Width="560" Height="280" Background="#FF155843" ClipToBounds="True"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+
+                <ItemsControl.ItemContainerStyle>
+                    <Style TargetType="ContentPresenter">
+                        <Setter Property="Canvas.Left" Value="{Binding X}" />
+                        <Setter Property="Canvas.Top" Value="{Binding Y}" />
+                    </Style>
+                </ItemsControl.ItemContainerStyle>
+                
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Ellipse Width="13" Height="13" Fill="Red"/>
+                        <!-- Do powiązania -->
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+
+            </ItemsControl>
         </Border>
     </Grid>
 </Window>

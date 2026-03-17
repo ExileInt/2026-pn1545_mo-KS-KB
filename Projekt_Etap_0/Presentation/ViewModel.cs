@@ -2,13 +2,16 @@
 using System.Windows;
 using System.Windows.Documents;
 using System.Windows.Input;
+using System.Collections.ObjectModel;
 using Logic;
 
 namespace Presentation
 {
-    internal class ViewModel : INotifyPropertyChanged
+    public class ViewModel : INotifyPropertyChanged
     {
-        private readonly Simulation simulation = new Simulation();
+        public ObservableCollection<IBall> Balls { get; set; } = new ObservableCollection<IBall>();
+
+        private readonly ISimulation _simulation;
 
         private void OnStateChanged(string parametr)
         {
@@ -19,11 +22,18 @@ namespace Presentation
         {
             get;
         }
-        public ViewModel()
+        public ViewModel(ISimulation simulation)
         {
+            _simulation = simulation;
+
             StartCommand = new CommandHandler(() =>
             {
-                simulation.Start();
+                _simulation.Start();
+                Balls.Clear();
+                foreach (IBall ball in _simulation.Balls)
+                {
+                    Balls.Add(ball);
+                }
             });
         }
 
