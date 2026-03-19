@@ -18,8 +18,8 @@ namespace Logic
         public void Start()
         {
             Random random = new Random();
-            float randX = (float)random.Next(3, 527);
-            float randY = (float)random.Next(3, 277);
+            float randX = (float)random.Next(0, 546); //ciekawostka - pozycja elipsy to nie jej centrum tylko lwy górny róg, więc tylko od z górnego przedziału się odejmuje
+            float randY = (float)random.Next(0, 266);
             Ball ball = new Ball(new System.Numerics.Vector2(randX, randY));
 
             BallAdapter adapter = new BallAdapter(ball);
@@ -36,7 +36,7 @@ namespace Logic
 
         public double X => _ball.Position.X;
         public double Y => _ball.Position.Y;
-        public double Diameter => 3;
+        public double Diameter => 7;
         public BallAdapter(Ball ball)
         {
             _ball = ball;
