@@ -13,11 +13,6 @@ namespace Presentation
 
         private readonly ISimulation _simulation;
 
-        private void OnStateChanged(string parametr)
-        {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(parametr));
-        }
-
         public ICommand StartCommand
         {
             get;

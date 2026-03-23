@@ -13,7 +13,6 @@ namespace Logic
     {
         public ObservableCollection<IBall> Balls { get; } = new ObservableCollection<IBall>();
 
-        public event NotifyCollectionChangedEventHandler CollectionChanged;
 
         public void Start()
         {
