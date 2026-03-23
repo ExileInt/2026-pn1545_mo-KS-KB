@@ -8,7 +8,7 @@ namespace Data
 {
     public class Ball : INotifyPropertyChanged
     {
-        private readonly int _radius = 3;
+        private readonly int _radius = 7;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -16,8 +16,8 @@ namespace Data
 
         public Ball(Vector2 position)
         {
-            if (position.X < _radius || position.Y < _radius || position.X > (530 - _radius) || position.Y > (280 - _radius))
-                throw new ArgumentException("Position cannot be negative");
+            if (position.X < 0 || position.Y < 0 || position.X > (560 - _radius * 2) || position.Y > (280 - _radius * 2))
+                throw new ArgumentException("Position out of bounds");
             _position = position;
         }
 
@@ -26,9 +26,9 @@ namespace Data
             get { return _position; } 
             set 
             {
-                if (value.X < _radius || value.Y < _radius || value.X > (530 - _radius) || value.Y > (280 - _radius))
+                if (value.X < 0 || value.Y < 0 || value.X > (560 - _radius * 2) || value.Y > (280 - _radius * 2))
                 {
-                    throw new ArgumentException("Position cannot be negative");
+                    throw new ArgumentException("Position out of bounds");
                 }
                 _position = value;
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Position"));

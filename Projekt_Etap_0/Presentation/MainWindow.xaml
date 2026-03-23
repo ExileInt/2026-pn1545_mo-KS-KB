@@ -33,7 +33,7 @@
                 
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Ellipse Width="13" Height="13" Fill="Red"/>
+                        <Ellipse Width="14" Height="14" Fill="Red"/>
                         <!-- Do powiązania -->
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
