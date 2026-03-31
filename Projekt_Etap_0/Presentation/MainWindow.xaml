@@ -9,9 +9,9 @@
     <Grid Background="#FF313131">
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="10">
             <Label Content="Podaj liczbę kul:" HorizontalAlignment="Left" VerticalAlignment="Center" FontSize="24"/>
-            <TextBox Name="BallsCountTextBox" HorizontalAlignment="Left" VerticalAlignment="Center" FontSize="24" Width="200"/>
+            <TextBox Name="BallsCountTextBox" Text="{Binding BallsCount}" HorizontalAlignment="Left" VerticalAlignment="Center" FontSize="24" Width="200"/>
             <Button Name="StartButton" Content="Start" Width="100" Height="40" Margin="50,0,10,0" Command="{Binding StartCommand}"/>
-            <Button Name="StopButton" Content="Stop" Width="100" Height="40"/>
+            <Button Name="StopButton" Content="Stop" Width="100" Height="40" Click="StopButton_Click" Command="{Binding StopCommand}"/>
         </StackPanel>
         <Border BorderBrush="DarkGray" BorderThickness="10" Width="580" Height="300" 
                 HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -33,8 +33,8 @@
                 
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Ellipse Width="14" Height="14" Fill="Red"/>
-                        <!-- Do powiązania -->
+                        <Ellipse Width="{Binding Diameter}" Height="{Binding Diameter}" Fill="Red"/>
+                        
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
 
