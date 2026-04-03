@@ -17,9 +17,18 @@ namespace Logic
         public ObservableCollection<IBall> Balls { get; } = new ObservableCollection<IBall>();
 
         private bool _isRunning = false;
+        private readonly IBallRepository _ballRepository;
+
+        private readonly int _diameter;
+
+        public Simulation(IBallRepository ballRepository)
+        {
+            _ballRepository = ballRepository;
+            _diameter = _ballRepository.DefaultDiameter;
+        }
         public void GenerateBall(int ballCount)
         {
-            int diameter = Ball.Diameter;
+            int diameter = _diameter;
             Random random = new Random();
             float randX = 0.0f;
             float randY = 0.0f;
@@ -38,24 +47,35 @@ namespace Logic
                     randY = (float)random.Next(0, 280 - diameter);
                 } while (!checkIfValidPosition(new Vector2(randX, randY)));
 
-                Ball ball = new Ball(new Vector2(randX, randY));
+                IDataBall dataBall = _ballRepository.CreateBall(new Vector2(randX, randY));
 
-                BallAdapter adapter = new BallAdapter(ball);
+                BallAdapter adapter = new BallAdapter(dataBall);
                 Balls.Add(adapter);
             }
         }
 
         public bool checkIfValidPosition(Vector2 position)
         {
-            int diameter = Ball.Diameter;
             foreach (IBall ball in Balls)
             {
-                if (Vector2.Distance(ball.Position, position) < diameter)
+                if (Vector2.Distance(ball.Position, position) < _diameter)
                 {
                     return false;
                 }
             }
             return true;
+        }
+
+        public void StartWith(int count)
+        {
+            if (_isRunning) { return; }
+
+            Balls.Clear();
+            for (int i = 0; i < count; i++)
+            {
+                GenerateBall(count);
+            }
+            Start();
         }
 
         public async void Start()
@@ -94,13 +114,13 @@ namespace Logic
                         Vector2 Position2 = ball2.Position;
                         Vector2 Velocity1 = ball1.Velocity;
                         Vector2 Velocity2 = ball2.Velocity;
-                        float radius = Ball.Diameter / 2;
+                        float radius = _diameter / 2;
                         Vector2 Center1 = Vector2.Add(Position1, new Vector2(radius, radius));
                         Vector2 Center2 = Vector2.Add(Position2, new Vector2(radius, radius));
 
                         float distance = Vector2.Distance(Center1, Center2);
 
-                        if (distance <= Ball.Diameter)
+                        if (distance <= _diameter)
                         {
                             Vector2 normal = Vector2.Normalize(Center1 - Center2);
                             Vector2 dV = ball1.Velocity - ball2.Velocity;
@@ -130,12 +150,12 @@ namespace Logic
         {
             Vector2 tempPostition = Vector2.Add(ball.Position, ball.Velocity);
 
-            if (tempPostition.X < 0 || tempPostition.X > 546)
+            if (tempPostition.X < 0 || tempPostition.X > 560 - _diameter)
             {
                 ball.Velocity = new Vector2(-ball.Velocity.X, ball.Velocity.Y);
             }
 
-            if (tempPostition.Y < 0 || tempPostition.Y > 266)
+            if (tempPostition.Y < 0 || tempPostition.Y > 280 - _diameter)
             {
                 ball.Velocity = new Vector2(ball.Velocity.X, -ball.Velocity.Y);
             }
@@ -154,29 +174,29 @@ namespace Logic
 
     public class BallAdapter : IBall
     {
-        private readonly Ball _ball;
+        private readonly IDataBall _dataBall;
 
         public event PropertyChangedEventHandler PropertyChanged;
 
         public Vector2 Position 
         { 
-            get { return _ball.Position; }
-            set { _ball.Position = value; }
+            get { return _dataBall.Position; }
+            set { _dataBall.Position = value; }
         }
 
         public Vector2 Velocity 
         { 
-            get => _ball.Velocity; 
-            set => _ball.Velocity = value; 
+            get => _dataBall.Velocity; 
+            set => _dataBall.Velocity = value; 
         }
-        public double X => _ball.Position.X;
-        public double Y => _ball.Position.Y;
+        public double X => _dataBall.Position.X;
+        public double Y => _dataBall.Position.Y;
 
-        public double Diameter => Ball.Diameter;
-        public BallAdapter(Ball ball)
+        public double Diameter => _dataBall.Diameter;
+        public BallAdapter(IDataBall dataBall)
         {
-            _ball = ball;
-            _ball.PropertyChanged += OnBallPropertyChanged;
+            _dataBall = dataBall;
+            _dataBall.PropertyChanged += OnBallPropertyChanged;
         }
 
         private void OnBallPropertyChanged(object sender, PropertyChangedEventArgs e)
@@ -189,8 +209,6 @@ namespace Logic
 
             }
         }
-    }
-
-    
+    }  
 }
 

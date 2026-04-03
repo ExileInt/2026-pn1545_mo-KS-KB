@@ -14,7 +14,8 @@ namespace Presentation
         private readonly ISimulation _simulation;
 
         private string _ballsCount = string.Empty;
-        public ObservableCollection<IBall> Balls { get; set; } = new ObservableCollection<IBall>();
+        public ObservableCollection<IBall> Balls => _simulation.Balls;
+
         public string BallsCount
         {
             get => _ballsCount;
@@ -40,30 +41,16 @@ namespace Presentation
             {
                 if (!String.IsNullOrEmpty(_ballsCount))
                 {
-                    int count = Convert.ToInt32(_ballsCount);
-                    if (count != 0)
+                    if (int.TryParse(_ballsCount, out int count) && count != 0)
                     {
-                        _simulation.Balls.Clear();
                         try
                         {
-                            for (int i = 0; i < count; i++)
-                            {
-                                _simulation.GenerateBall(count);
-
-                            }
-                            Balls.Clear();  
+                            _simulation.StartWith(count);
                         }
                         catch (Exception ex)
                         {
                             MessageBox.Show(ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
                         }
-
-                        foreach (IBall ball in _simulation.Balls)
-                        {
-                            Balls.Add(ball);
-                        }
-
-                        _simulation.Start();
                     }
                 }
 

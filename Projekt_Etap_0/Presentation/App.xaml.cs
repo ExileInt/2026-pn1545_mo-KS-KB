@@ -3,6 +3,7 @@ using System.Data;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Logic;
+using Data;
 
 namespace Presentation
 {
@@ -20,6 +21,7 @@ namespace Presentation
         }
         private void ConfigureServices(ServiceCollection services)
         {
+            services.AddSingleton<IBallRepository, BallRepository>();
             services.AddSingleton<ISimulation, Simulation>();
             services.AddTransient<ViewModel>();
             services.AddTransient<MainWindow>();

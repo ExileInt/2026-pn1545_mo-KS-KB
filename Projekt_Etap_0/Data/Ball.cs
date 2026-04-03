@@ -6,7 +6,7 @@ using System.Text;
 
 namespace Data
 {
-    public class Ball : INotifyPropertyChanged
+    public class Ball : INotifyPropertyChanged, IDataBall
     {
         private int _diameter = Diameter;
 
@@ -51,6 +51,16 @@ namespace Data
                 _velocity = value;
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Velocity"));
             }
+        }
+
+        int IDataBall.Diameter => _diameter;
+    }
+
+    public static class BallFactory
+    {
+        public static Ball CreateBall(Vector2 position)
+        {
+            return new Ball(position);
         }
     }
 }
