@@ -30,5 +30,24 @@ namespace Tests
             Assert.Throws<ArgumentException>(() => new Ball(new Vector2(-2, 5)));
             Assert.Throws<ArgumentException>(() => new Ball(new Vector2(600, 300)));
         }
+
+        [TestMethod]
+        public void Change_TriggersPropertyChangedTest()
+        {
+            Ball ball = new Ball(new Vector2(10, 10));
+            bool eventFired = false;
+
+            ball.PropertyChanged += (sender, e) =>
+            {
+                if (e.PropertyName == "Position")
+                {
+                    eventFired = true;
+                }
+            };
+
+            ball.Position = new Vector2(20, 20);
+
+            Assert.IsTrue(eventFired);
+        }
     }
 }
