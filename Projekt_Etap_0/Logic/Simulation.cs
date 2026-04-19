@@ -97,52 +97,75 @@ namespace Logic
         {
             _isRunning = false;
         }
+
+        /// <summary>
+        /// Zastąpienie użycia pętli w pętli o złożoności O(n^2) strukturą QuadTree, która pozwala na ograniczenie liczby sprawdzanych kolizji
+        /// do kul znajdujących się w najbliższym otoczeniu (średnica * 2) każdej kuli. Dzięki temu złożoność algorytmu może zostać znacznie zredukowana,
+        /// szczególnie przy większej liczbie kul. Osiągnięto przyspieszenie około 4-5 krotne w porównaniu do poprzedniej implementacji. 
+        /// Dla 300 kul frametime spadł z około 11ms do około 2-3ms.
+        /// </summary>
+
         private async Task RunSimulationLoop()
         {
-            while (_isRunning)
+            using (System.IO.StreamWriter writer = new System.IO.StreamWriter("frame_generation_time.txt", append: false))
             {
-                //ball.Velocity = ballInitialVelocity - Vector2.Dot(collisionDirection, normal) * normal;
-                //ball2.Velocity = ball2InitialVelocity + Vector2.Dot(collisionDirection, normal) * normal;
-
-                for (int i = 0; i < Balls.Count; i++)
+                while (_isRunning)
                 {
-                    for (int j = i + 1; j < Balls.Count; j++)
+                    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+                    QuadTree tree = new QuadTree(Balls);
+                    for (int i = 0; i < Balls.Count; i++)
                     {
                         IBall ball1 = Balls[i];
-                        IBall ball2 = Balls[j];
-                        Vector2 Position1 = ball1.Position;
-                        Vector2 Position2 = ball2.Position;
-                        Vector2 Velocity1 = ball1.Velocity;
-                        Vector2 Velocity2 = ball2.Velocity;
-                        float radius = _diameter / 2;
-                        Vector2 Center1 = Vector2.Add(Position1, new Vector2(radius, radius));
-                        Vector2 Center2 = Vector2.Add(Position2, new Vector2(radius, radius));
 
-                        float distance = Vector2.Distance(Center1, Center2);
+                        // 2. Szukamy kul tylko w najbliższym otoczeniu (rozmiar średnicy wokół kuli)
+                        float searchRadius = _diameter * 2;
+                        Rect2D searchRange = new Rect2D(
+                            ball1.Position.X - searchRadius,
+                            ball1.Position.Y - searchRadius,
+                            searchRadius * 2,
+                            searchRadius * 2);
 
-                        if (distance <= _diameter)
+                        List<IBall> nearbyBalls = new List<IBall>();
+                        tree.Query(searchRange, nearbyBalls);
+
+                        // 3. Sprawdzamy kolizje tylko z wyselekcjonowanymi pobliskimi kulami
+                        foreach (IBall ball2 in nearbyBalls)
                         {
-                            Vector2 normal = Vector2.Normalize(Center1 - Center2);
-                            Vector2 dV = ball1.Velocity - ball2.Velocity;
+                            if (ball1 == ball2) continue; // Pomijamy sprawdzenie z samym sobą
 
-                            if (Vector2.Dot(dV, normal) < 0)
+                            float radius = _diameter / 2;
+                            Vector2 Center1 = Vector2.Add(ball1.Position, new Vector2(radius, radius));
+                            Vector2 Center2 = Vector2.Add(ball2.Position, new Vector2(radius, radius));
+
+                            float distance = Vector2.Distance(Center1, Center2);
+
+                            if (distance <= _diameter)
                             {
-                                Vector2 collisionResponse = Vector2.Dot(dV, normal) * normal; // skalar daje długość, normalna daje kierunek i zwrot
-                                ball1.Velocity -= collisionResponse;
-                                ball2.Velocity += collisionResponse;
+                                Vector2 normal = Vector2.Normalize(Center1 - Center2);
+                                Vector2 dV = ball1.Velocity - ball2.Velocity;
+
+                                // Warunek zapobiegający "sklejaniu się" kul po zderzeniu
+                                if (Vector2.Dot(dV, normal) < 0)
+                                {
+                                    Vector2 collisionResponse = Vector2.Dot(dV, normal) * normal;
+                                    ball1.Velocity -= collisionResponse;
+                                    ball2.Velocity += collisionResponse;
+                                }
                             }
                         }
-
                     }
 
-                }
+                    foreach (IBall ball in Balls)
+                    {
+                        moveIfLegal(ball);
+                    }
 
-                foreach(IBall ball in Balls)
-                {
-                    moveIfLegal(ball);
-                }
+                    stopwatch.Stop();
+                    await writer.WriteLineAsync(stopwatch.Elapsed.TotalMilliseconds.ToString());
 
-                await Task.Delay(16);
+                    await Task.Delay(Math.Max(0, 16 - (int)stopwatch.Elapsed.TotalMilliseconds)); // Istniały klatki, które generowały się dłużej niż 16ms, więc dodajemy opóźnienie tylko wtedy, gdy generacja klatki była szybsza niż 16ms
+                }
             }
         }
 
@@ -209,6 +232,131 @@ namespace Logic
 
             }
         }
-    }  
+    }
+    public struct Rect2D
+    {
+        public float X;
+        public float Y;
+        public float Width;
+        public float Height;
+
+        public Rect2D(float x, float y, float width, float height)
+        {
+            X = x;
+            Y = y;
+            Width = width;
+            Height = height;
+        }
+
+        public bool Contains(Vector2 point)
+        {
+            return point.X >= X && point.X <= X + Width &&
+                   point.Y >= Y && point.Y <= Y + Height;
+        }
+
+        public bool Intersects(Rect2D range)
+        {
+            return !(range.X > X + Width ||
+                     range.X + range.Width < X ||
+                     range.Y > Y + Height ||
+                     range.Y + range.Height < Y);
+        }
+    }
+
+    public class QuadTree
+    {
+        private readonly int _capacity;
+        private readonly Rect2D _boundary;
+        private readonly List<IBall> _balls;
+        private bool _divided;
+
+        private QuadTree _northWest;
+        private QuadTree _northEast;
+        private QuadTree _southWest;
+        private QuadTree _southEast;
+
+        public QuadTree(Rect2D boundary, int capacity)
+        {
+            _boundary = boundary;
+            _capacity = capacity;
+            _balls = new List<IBall>();
+            _divided = false;
+        }
+
+        // Konstruktor na podstawie widoku symulacji (560x280)
+        public QuadTree(ObservableCollection<IBall> balls)
+            : this(new Rect2D(0, 0, 560, 280), 4)
+        {
+            foreach (var ball in balls)
+            {
+                Insert(ball);
+            }
+        }
+
+        public bool Insert(IBall ball)
+        {
+            if (!_boundary.Contains(ball.Position))
+            {
+                return false;
+            }
+
+            if (_balls.Count < _capacity)
+            {
+                _balls.Add(ball);
+                return true;
+            }
+
+            if (!_divided)
+            {
+                Subdivide();
+            }
+
+            if (_northWest.Insert(ball)) return true;
+            if (_northEast.Insert(ball)) return true;
+            if (_southWest.Insert(ball)) return true;
+            if (_southEast.Insert(ball)) return true;
+
+            return false;
+        }
+
+        private void Subdivide()
+        {
+            float x = _boundary.X;
+            float y = _boundary.Y;
+            float w = _boundary.Width / 2;
+            float h = _boundary.Height / 2;
+
+            _northWest = new QuadTree(new Rect2D(x, y, w, h), _capacity);
+            _northEast = new QuadTree(new Rect2D(x + w, y, w, h), _capacity);
+            _southWest = new QuadTree(new Rect2D(x, y + h, w, h), _capacity);
+            _southEast = new QuadTree(new Rect2D(x + w, y + h, w, h), _capacity);
+
+            _divided = true;
+        }
+
+        public void Query(Rect2D range, List<IBall> found)
+        {
+            if (!_boundary.Intersects(range))
+            {
+                return;
+            }
+
+            foreach (IBall ball in _balls)
+            {
+                if (range.Contains(ball.Position))
+                {
+                    found.Add(ball);
+                }
+            }
+
+            if (_divided)
+            {
+                _northWest.Query(range, found);
+                _northEast.Query(range, found);
+                _southWest.Query(range, found);
+                _southEast.Query(range, found);
+            }
+        }
+    }
 }
 
