@@ -114,47 +114,64 @@ namespace Logic
                     var stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
                     QuadTree tree = new QuadTree(Balls);
+
+                    List<Task> collisionTasks = new List<Task>();
                     for (int i = 0; i < Balls.Count; i++)
                     {
                         IBall ball1 = Balls[i];
 
                         // 2. Szukamy kul tylko w najbliższym otoczeniu (rozmiar średnicy wokół kuli)
-                        float searchRadius = _diameter * 2;
-                        Rect2D searchRange = new Rect2D(
-                            ball1.Position.X - searchRadius,
-                            ball1.Position.Y - searchRadius,
-                            searchRadius * 2,
-                            searchRadius * 2);
-
-                        List<IBall> nearbyBalls = new List<IBall>();
-                        tree.Query(searchRange, nearbyBalls);
-
-                        // 3. Sprawdzamy kolizje tylko z wyselekcjonowanymi pobliskimi kulami
-                        foreach (IBall ball2 in nearbyBalls)
+                        collisionTasks.Add(Task.Run(() =>
                         {
-                            if (ball1 == ball2) continue; // Pomijamy sprawdzenie z samym sobą
+                            float searchRadius = _diameter * 2;
+                            Rect2D searchRange = new Rect2D(
+                                ball1.Position.X - searchRadius,
+                                ball1.Position.Y - searchRadius,
+                                searchRadius * 2,
+                                searchRadius * 2);
 
-                            float radius = _diameter / 2;
-                            Vector2 Center1 = Vector2.Add(ball1.Position, new Vector2(radius, radius));
-                            Vector2 Center2 = Vector2.Add(ball2.Position, new Vector2(radius, radius));
+                            List<IBall> nearbyBalls = new List<IBall>();
+                            tree.Query(searchRange, nearbyBalls);
 
-                            float distance = Vector2.Distance(Center1, Center2);
-
-                            if (distance <= _diameter)
+                            // 3. Sprawdzamy kolizje tylko z wyselekcjonowanymi pobliskimi kulami
+                            foreach (IBall ball2 in nearbyBalls)
                             {
-                                Vector2 normal = Vector2.Normalize(Center1 - Center2);
-                                Vector2 dV = ball1.Velocity - ball2.Velocity;
+                                int hash1 = ball1.GetHashCode();
+                                int hash2 = ball2.GetHashCode();
+                                IBall lock1 = hash1 < hash2 ? ball1 : ball2;
+                                IBall lock2 = hash2 < hash1 ? ball1 : ball2;
 
-                                // Warunek zapobiegający "sklejaniu się" kul po zderzeniu
-                                if (Vector2.Dot(dV, normal) < 0)
+                                if (ball1 == ball2) continue; // Pomijamy sprawdzenie z samym sobą
+
+                                float radius = _diameter / 2;
+                                Vector2 Center1 = Vector2.Add(ball1.Position, new Vector2(radius, radius));
+                                Vector2 Center2 = Vector2.Add(ball2.Position, new Vector2(radius, radius));
+
+                                float distance = Vector2.Distance(Center1, Center2);
+
+                                if (distance <= _diameter)
                                 {
-                                    Vector2 collisionResponse = Vector2.Dot(dV, normal) * normal;
-                                    ball1.Velocity -= collisionResponse;
-                                    ball2.Velocity += collisionResponse;
+                                    Vector2 normal = Vector2.Normalize(Center1 - Center2);
+                                    Vector2 dV = ball1.Velocity - ball2.Velocity;
+
+                                    // Warunek zapobiegający "sklejaniu się" kul po zderzeniu
+                                    if (Vector2.Dot(dV, normal) < 0)
+                                    {
+                                        Vector2 collisionResponse = Vector2.Dot(dV, normal) * normal;
+                                        lock (lock1) // zamek 1
+                                        {
+                                            lock (lock2) // zamek 2
+                                            {
+                                                ball1.Velocity -= collisionResponse;
+                                                ball2.Velocity += collisionResponse;
+                                            }
+                                        }
+                                    }
                                 }
                             }
-                        }
+                        }));
                     }
+                    await Task.WhenAll(collisionTasks); // Bariera
 
                     foreach (IBall ball in Balls)
                     {
