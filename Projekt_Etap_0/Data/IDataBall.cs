@@ -8,6 +8,7 @@ namespace Data
 {
     public interface IDataBall : INotifyPropertyChanged
     {
+        float MaxVelocity { get; }
         Vector2 Position { get; set; }
         Vector2 Velocity { get; set; }
         int Diameter { get; }

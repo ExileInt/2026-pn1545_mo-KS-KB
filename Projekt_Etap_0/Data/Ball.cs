@@ -8,6 +8,16 @@ namespace Data
 {
     public class Ball : INotifyPropertyChanged, IDataBall
     {
+        private const float _MaxVelocity = 6f;
+
+        public float MaxVelocity
+        {
+            get
+            {
+                return _MaxVelocity;
+            }
+        }
+
         private int _diameter = Diameter;
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -32,10 +42,14 @@ namespace Data
             get { return _position; } 
             set 
             {
-                if (value.X < 0 || value.Y < 0 || value.X > (560 - _diameter) || value.Y > (280 - _diameter))
-                {
-                    throw new ArgumentException("Position out of bounds");
-                }
+                //if (value.X < 0 || value.Y < 0 || value.X > (560 - _diameter) || value.Y > (280 - _diameter))
+                //{
+                //    throw new ArgumentException("Position out of bounds");
+                //}
+                if (value.X < 0) value.X= 0;
+                if (value.Y < 0) value.Y = 0;
+                if (value.X > (560 - _diameter)) value.X = 560 - _diameter;
+                if (value.Y > (280 - _diameter)) value.Y = 280 - _diameter;
                 _position = value;
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Position"));
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("X"));

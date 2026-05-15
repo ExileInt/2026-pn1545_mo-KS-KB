@@ -16,6 +16,16 @@ namespace Logic
     {
         public ObservableCollection<IBall> Balls { get; } = new ObservableCollection<IBall>();
 
+        private QuadTree _quadTree;
+
+        private Vector2[] _nextVelocities;
+        private Vector2[] _nextPositions;
+
+        private Barrier _calculationBarrier;
+        private Barrier _updateBarrier;
+
+        private System.Diagnostics.Stopwatch _frameStopwatch = new System.Diagnostics.Stopwatch();
+
         private bool _isRunning = false;
         private readonly IBallRepository _ballRepository;
 
@@ -78,113 +88,215 @@ namespace Logic
             Start();
         }
 
-        public async void Start()
+        public void Start()
         {
             if (_isRunning) return;
             _isRunning = true;
             Random random = new Random();
+            int count = Balls.Count;
 
-            foreach (IBall ball in Balls)
+            _quadTree = new QuadTree(Balls);
+            _nextPositions = new Vector2[count];
+            _nextVelocities = new Vector2[count];
+            _calculationBarrier = new Barrier(count);
+            _updateBarrier = new Barrier(count, (barrier) =>
             {
+                int elapsed = (int)_frameStopwatch.ElapsedMilliseconds;
+                if (elapsed < 16)
+                {
+                    Thread.Sleep(16 - elapsed);
+                }
+
+                _quadTree = new QuadTree(Balls);
+                _frameStopwatch.Restart();
+            });
+
+            _frameStopwatch.Start();
+
+            for (int i = 0; i < count; i++)
+            {
+                int localI = i;
+                IBall ball = Balls[localI];
                 ball.Velocity = new Vector2(nextFloat(-3,3), nextFloat(-3, 3));
+                Thread thread = new Thread(() => RunSimulationLoop(ball, localI));
+                thread.Start();
             }
-
-            await RunSimulationLoop();
-
-        }
+        }       
 
         public void Stop()
         {
             _isRunning = false;
         }
 
-        /// <summary>
-        /// Zastąpienie użycia pętli w pętli o złożoności O(n^2) strukturą QuadTree, która pozwala na ograniczenie liczby sprawdzanych kolizji
-        /// do kul znajdujących się w najbliższym otoczeniu (średnica * 2) każdej kuli. Dzięki temu złożoność algorytmu może zostać znacznie zredukowana,
-        /// szczególnie przy większej liczbie kul. Osiągnięto przyspieszenie około 4-5 krotne w porównaniu do poprzedniej implementacji. 
-        /// Dla 300 kul frametime spadł z około 11ms do około 2-3ms.
-        /// </summary>
-
-        private async Task RunSimulationLoop()
+        private void RunSimulationLoop(IBall ball, int index)
         {
-            using (System.IO.StreamWriter writer = new System.IO.StreamWriter("frame_generation_time.txt", append: false))
+            List<IBall> nearbyBalls = new List<IBall>();
+
+            while (_isRunning)
             {
-                while (_isRunning)
+                nearbyBalls.Clear();
+                calculateCollision(ball, index, nearbyBalls);
+            }
+        }
+
+        private void calculateCollision(IBall currentBall, int index, List<IBall> nearbyBalls)
+        {
+            Vector2 deltaVel = Vector2.Zero;
+            float searchRadius = _diameter * 2;
+            Rect2D searchRange = new Rect2D(
+                currentBall.Position.X - searchRadius,
+                currentBall.Position.Y - searchRadius,
+                searchRadius * 2,
+                searchRadius * 2);
+
+            _quadTree.Query(searchRange, nearbyBalls);
+
+            foreach (IBall otherBall in nearbyBalls)
+            {
+                if (currentBall == otherBall) continue; // Pomijamy sprawdzenie z samym sobą
+
+                float radius = _diameter / 2;
+                Vector2 Center1 = Vector2.Add(currentBall.Position, new Vector2(radius, radius));
+                Vector2 Center2 = Vector2.Add(otherBall.Position, new Vector2(radius, radius));
+
+                float distance = Vector2.Distance(Center1, Center2);
+
+                if (distance <= _diameter && distance > 0)
                 {
-                    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                    Vector2 normal = Vector2.Normalize(Center1 - Center2);
+                    Vector2 dV = currentBall.Velocity - otherBall.Velocity;
 
-                    QuadTree tree = new QuadTree(Balls);
-                    for (int i = 0; i < Balls.Count; i++)
+                    // Warunek zapobiegający "sklejaniu się" kul po zderzeniu
+                    if (Vector2.Dot(dV, normal) < 0)
                     {
-                        IBall ball1 = Balls[i];
-
-                        // 2. Szukamy kul tylko w najbliższym otoczeniu (rozmiar średnicy wokół kuli)
-                        float searchRadius = _diameter * 2;
-                        Rect2D searchRange = new Rect2D(
-                            ball1.Position.X - searchRadius,
-                            ball1.Position.Y - searchRadius,
-                            searchRadius * 2,
-                            searchRadius * 2);
-
-                        List<IBall> nearbyBalls = new List<IBall>();
-                        tree.Query(searchRange, nearbyBalls);
-
-                        // 3. Sprawdzamy kolizje tylko z wyselekcjonowanymi pobliskimi kulami
-                        foreach (IBall ball2 in nearbyBalls)
-                        {
-                            if (ball1 == ball2) continue; // Pomijamy sprawdzenie z samym sobą
-
-                            float radius = _diameter / 2;
-                            Vector2 Center1 = Vector2.Add(ball1.Position, new Vector2(radius, radius));
-                            Vector2 Center2 = Vector2.Add(ball2.Position, new Vector2(radius, radius));
-
-                            float distance = Vector2.Distance(Center1, Center2);
-
-                            if (distance <= _diameter)
-                            {
-                                Vector2 normal = Vector2.Normalize(Center1 - Center2);
-                                Vector2 dV = ball1.Velocity - ball2.Velocity;
-
-                                // Warunek zapobiegający "sklejaniu się" kul po zderzeniu
-                                if (Vector2.Dot(dV, normal) < 0)
-                                {
-                                    Vector2 collisionResponse = Vector2.Dot(dV, normal) * normal;
-                                    ball1.Velocity -= collisionResponse;
-                                    ball2.Velocity += collisionResponse;
-                                }
-                            }
-                        }
+                        //Vector2 collisionResponse = Vector2.Dot(dV, normal) * normal;
+                        //currentBall.Velocity -= collisionResponse;
+                        //otherBall.Velocity += collisionResponse;
+                        
+                        deltaVel -= Vector2.Dot(dV, normal) * normal;
                     }
-
-                    foreach (IBall ball in Balls)
-                    {
-                        moveIfLegal(ball);
-                    }
-
-                    stopwatch.Stop();
-                    await writer.WriteLineAsync(stopwatch.Elapsed.TotalMilliseconds.ToString());
-
-                    await Task.Delay(Math.Max(0, 16 - (int)stopwatch.Elapsed.TotalMilliseconds)); // Istniały klatki, które generowały się dłużej niż 16ms, więc dodajemy opóźnienie tylko wtedy, gdy generacja klatki była szybsza niż 16ms
                 }
             }
-        }
+            Vector2 tempPosition = Vector2.Add(currentBall.Position, currentBall.Velocity);
+            Vector2 tempVelocity = Vector2.Add(currentBall.Velocity, deltaVel);
 
-        public void moveIfLegal(IBall ball)
-        {
-            Vector2 tempPostition = Vector2.Add(ball.Position, ball.Velocity);
-
-            if (tempPostition.X < 0 || tempPostition.X > 560 - _diameter)
+            if (tempPosition.X < 0 || tempPosition.X > 560 - _diameter)
             {
-                ball.Velocity = new Vector2(-ball.Velocity.X, ball.Velocity.Y);
+                tempVelocity = new Vector2(-currentBall.Velocity.X, currentBall.Velocity.Y);
             }
 
-            if (tempPostition.Y < 0 || tempPostition.Y > 280 - _diameter)
+            if (tempPosition.Y < 0 || tempPosition.Y > 280 - _diameter)
             {
-                ball.Velocity = new Vector2(ball.Velocity.X, -ball.Velocity.Y);
+                tempVelocity = new Vector2(currentBall.Velocity.X, -currentBall.Velocity.Y);
             }
 
-            ball.Position = Vector2.Add(ball.Position, ball.Velocity);
+            _nextVelocities[index] = tempVelocity;
+            _nextPositions[index] = tempPosition;
+
+            _calculationBarrier.SignalAndWait();
+
+            currentBall.Velocity = _nextVelocities[index];
+            currentBall.Position = _nextPositions[index];
+
+            _updateBarrier.SignalAndWait();
         }
+
+
+            //using (System.IO.StreamWriter writer = new System.IO.StreamWriter("frame_generation_time.txt", append: false))
+            //{
+            //    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+            //    QuadTree tree = new QuadTree(Balls);
+            //    Vector2[] velocities = new Vector2[Balls.Count];
+            //    Parallel.For(0, Balls.Count, i =>
+            //    {
+            //        IBall ball1 = Balls[i];
+
+            //        // 2. Szukamy kul tylko w najbliższym otoczeniu (rozmiar średnicy wokół kuli)
+            //        float searchRadius = _diameter * 2;
+            //        Rect2D searchRange = new Rect2D(
+            //            ball1.Position.X - searchRadius,
+            //            ball1.Position.Y - searchRadius,
+            //            searchRadius * 2,
+            //            searchRadius * 2);
+
+            //        List<IBall> nearbyBalls = new List<IBall>();
+            //        tree.Query(searchRange, nearbyBalls);
+
+            //        // 3. Sprawdzamy kolizje tylko z wyselekcjonowanymi pobliskimi kulami
+            //        Vector2 delV = Vector2.Zero;
+            //        foreach (IBall ball2 in nearbyBalls)
+            //        {
+            //            if (ball1 == ball2) continue; // Pomijamy sprawdzenie z samym sobą
+
+            //            float radius = _diameter / 2;
+            //            Vector2 Center1 = Vector2.Add(ball1.Position, new Vector2(radius, radius));
+            //            Vector2 Center2 = Vector2.Add(ball2.Position, new Vector2(radius, radius));
+
+            //            float distance = Vector2.Distance(Center1, Center2);
+
+            //            if (distance <= _diameter && distance > 0)
+            //            {
+            //                Vector2 normal = Vector2.Normalize(Center1 - Center2);
+            //                Vector2 dV = ball1.Velocity - ball2.Velocity;
+
+            //                // Warunek zapobiegający "sklejaniu się" kul po zderzeniu
+            //                if (Vector2.Dot(dV, normal) < 0)
+            //                {
+            //                    //Vector2 collisionResponse = Vector2.Dot(dV, normal) * normal;
+            //                    //ball1.Velocity -= collisionResponse;
+            //                    //ball2.Velocity += collisionResponse;
+
+            //                    delV -= Vector2.Dot(dV, normal) * normal;
+            //                }
+            //            }
+            //        }
+            //        velocities[i] = delV;
+            //    });
+
+            //    for (int i = 0; i < Balls.Count; i++)
+            //    {
+            //        Balls[i].Velocity += velocities[i];
+            //    }
+
+
+            //    Parallel.ForEach(Balls, ball =>
+            //    {
+            //        moveIfLegal(ball);
+            //    });
+
+            //    stopwatch.Stop();
+            //    await writer.WriteLineAsync(stopwatch.Elapsed.TotalMilliseconds.ToString());
+            //    // Istniały klatki, które generowały się dłużej niż 16ms, więc dodajemy opóźnienie tylko wtedy, gdy generacja klatki była szybsza niż 16ms
+            //    await Task.Delay(Math.Max(0, 16 - (int)stopwatch.Elapsed.TotalMilliseconds)); 
+            //}
+
+        //public void moveIfLegal(IBall ball)
+        //{
+        //    Vector2 tempPostition = Vector2.Add(ball.Position, ball.Velocity);
+
+        //    if (tempPostition.X < 0 || tempPostition.X > 560 - _diameter)
+        //    {
+        //        ball.Velocity = new Vector2(-ball.Velocity.X, ball.Velocity.Y);
+        //    }
+
+        //    if (tempPostition.Y < 0 || tempPostition.Y > 280 - _diameter)
+        //    {
+        //        ball.Velocity = new Vector2(ball.Velocity.X, -ball.Velocity.Y);
+        //    }
+
+        //    if (Math.Abs(ball.Velocity.X) > ball.MaxVelocity)
+        //    {
+        //        ball.Velocity = new Vector2(Math.Sign(ball.Velocity.X) * ball.MaxVelocity, ball.Velocity.Y);
+        //    }
+
+        //    if (Math.Abs(ball.Velocity.Y) > ball.MaxVelocity)
+        //    {
+        //        ball.Velocity = new Vector2(ball.Velocity.X, Math.Sign(ball.Velocity.Y) * ball.MaxVelocity);
+        //    }
+
+        //    ball.Position = Vector2.Add(ball.Position, ball.Velocity);
+        //}
 
         public float nextFloat(int from, int to)
         {
@@ -200,6 +312,8 @@ namespace Logic
         private readonly IDataBall _dataBall;
 
         public event PropertyChangedEventHandler PropertyChanged;
+
+        public float MaxVelocity => _dataBall.MaxVelocity;
 
         public Vector2 Position 
         { 
