@@ -107,6 +107,9 @@ namespace Logic
 
         private async Task RunSimulationLoop()
         {
+            // Ustalamy liczbę wątków roboczych na podstawie dostępnych rdzeni procesora
+            int workerCount = Environment.ProcessorCount;
+
             using (System.IO.StreamWriter writer = new System.IO.StreamWriter("frame_generation_time.txt", append: false))
             {
                 while (_isRunning)
@@ -115,73 +118,89 @@ namespace Logic
 
                     QuadTree tree = new QuadTree(Balls);
 
-                    List<Task> collisionTasks = new List<Task>();
-                    for (int i = 0; i < Balls.Count; i++)
+                    List<Task> workers = new List<Task>(workerCount);
+
+                    int ballsPerWorker = Balls.Count / workerCount;
+
+                    for (int w = 0; w < workerCount; w++)
                     {
-                        IBall ball1 = Balls[i];
+                        int startIndex = w * ballsPerWorker;
+                        int endIndex = (w == workerCount - 1) ? Balls.Count : startIndex + ballsPerWorker;
 
-                        // 2. Szukamy kul tylko w najbliższym otoczeniu (rozmiar średnicy wokół kuli)
-                        collisionTasks.Add(Task.Run(() =>
+                        workers.Add(Task.Run(() =>
                         {
-                            float searchRadius = _diameter * 2;
-                            Rect2D searchRange = new Rect2D(
-                                ball1.Position.X - searchRadius,
-                                ball1.Position.Y - searchRadius,
-                                searchRadius * 2,
-                                searchRadius * 2);
-
-                            List<IBall> nearbyBalls = new List<IBall>();
-                            tree.Query(searchRange, nearbyBalls);
-
-                            // 3. Sprawdzamy kolizje tylko z wyselekcjonowanymi pobliskimi kulami
-                            foreach (IBall ball2 in nearbyBalls)
+                            for (int i = startIndex; i < endIndex; i++)
                             {
-                                int hash1 = ball1.GetHashCode();
-                                int hash2 = ball2.GetHashCode();
-                                IBall lock1 = hash1 < hash2 ? ball1 : ball2;
-                                IBall lock2 = hash2 < hash1 ? ball1 : ball2;
+                                IBall ball1 = Balls[i];
 
-                                if (ball1 == ball2) continue; // Pomijamy sprawdzenie z samym sobą
+                                float searchRadius = _diameter * 2;
+                                Rect2D searchRange = new Rect2D(
+                                    ball1.Position.X - searchRadius,
+                                    ball1.Position.Y - searchRadius,
+                                    searchRadius * 2,
+                                    searchRadius * 2);
 
-                                float radius = _diameter / 2;
-                                Vector2 Center1 = Vector2.Add(ball1.Position, new Vector2(radius, radius));
-                                Vector2 Center2 = Vector2.Add(ball2.Position, new Vector2(radius, radius));
+                                List<IBall> nearbyBalls = new List<IBall>();
+                                tree.Query(searchRange, nearbyBalls);
 
-                                float distance = Vector2.Distance(Center1, Center2);
-
-                                if (distance <= _diameter)
+                                foreach (IBall ball2 in nearbyBalls)
                                 {
-                                    Vector2 normal = Vector2.Normalize(Center1 - Center2);
-                                    Vector2 dV = ball1.Velocity - ball2.Velocity;
+                                    int hash1 = ball1.GetHashCode();
+                                    int hash2 = ball2.GetHashCode();
+                                    if (hash1 >= hash2) continue;
 
-                                    // Warunek zapobiegający "sklejaniu się" kul po zderzeniu
-                                    if (Vector2.Dot(dV, normal) < 0)
+                                    IBall lock1 = hash1 < hash2 ? ball1 : ball2;
+                                    IBall lock2 = hash1 < hash2 ? ball2 : ball1;
+
+                                    float radius = _diameter / 2;
+                                    Vector2 Center1 = ball1.Position + new Vector2(radius, radius);
+                                    Vector2 Center2 = ball2.Position + new Vector2(radius, radius);
+
+                                    float distance = Vector2.Distance(Center1, Center2);
+
+                                    if (distance == 0) distance = 0.01f;
+
+                                    if (distance <= _diameter)
                                     {
-                                        Vector2 collisionResponse = Vector2.Dot(dV, normal) * normal;
-                                        lock (lock1) // zamek 1
+                                        Vector2 normal = Vector2.Normalize(Center1 - Center2);
+                                        lock (lock1)
                                         {
-                                            lock (lock2) // zamek 2
+                                            lock (lock2)
                                             {
-                                                ball1.Velocity -= collisionResponse;
-                                                ball2.Velocity += collisionResponse;
+                                                Vector2 dV = ball1.Velocity - ball2.Velocity;
+                                                if (Vector2.Dot(dV, normal) < 0)
+                                                {
+                                                    Vector2 collisionResponse = Vector2.Dot(dV, normal) * normal;
+                                                    ball1.Velocity -= collisionResponse;
+                                                    ball2.Velocity += collisionResponse;
+                                                }
                                             }
                                         }
                                     }
                                 }
+                           
                             }
                         }));
                     }
-                    await Task.WhenAll(collisionTasks); // Bariera
 
+                    // 3. Czekamy (bariera), aż wszystkie wątki skończą przetwarzać swoje pule
+                    await Task.WhenAll(workers);
+
+                    // Aktualizacja pozycji
                     foreach (IBall ball in Balls)
                     {
+                        //ball.Velocity = ball.NextVelocity;
                         moveIfLegal(ball);
                     }
 
                     stopwatch.Stop();
                     await writer.WriteLineAsync(stopwatch.Elapsed.TotalMilliseconds.ToString());
 
-                    await Task.Delay(Math.Max(0, 16 - (int)stopwatch.Elapsed.TotalMilliseconds)); // Istniały klatki, które generowały się dłużej niż 16ms, więc dodajemy opóźnienie tylko wtedy, gdy generacja klatki była szybsza niż 16ms
+                    int delay = 16 - (int)stopwatch.Elapsed.TotalMilliseconds;
+                    if (delay > 0)
+                    {
+                        await Task.Delay(delay);
+                    }
                 }
             }
         }
@@ -229,6 +248,7 @@ namespace Logic
             get => _dataBall.Velocity; 
             set => _dataBall.Velocity = value; 
         }
+
         public double X => _dataBall.Position.X;
         public double Y => _dataBall.Position.Y;
 

@@ -19,7 +19,6 @@ namespace Data
 
         public const int Diameter = 14;
 
-
         public Ball(Vector2 position)
         {
             if (position.X < 0 || position.Y < 0 || position.X > (560 - _diameter) || position.Y > (280 - _diameter))
