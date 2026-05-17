@@ -7,6 +7,8 @@ using System.ComponentModel;
 using System.Numerics;
 using System.Threading.Tasks;
 using System.Threading;
+using System.Linq;
+using System.Text;
 
 
 
@@ -18,7 +20,7 @@ namespace Logic
 
         private bool _isRunning = false;
         private readonly IBallRepository _ballRepository;
-
+        private string frameTimes = string.Empty;
         private readonly int _diameter;
 
         public Simulation(IBallRepository ballRepository)
@@ -68,7 +70,7 @@ namespace Logic
 
         public void StartWith(int count)
         {
-            if (_isRunning) { return; }
+            if (_isRunning) return;
 
             Balls.Clear();
             for (int i = 0; i < count; i++)
@@ -78,150 +80,140 @@ namespace Logic
             Start();
         }
 
+
         public async void Start()
         {
             if (_isRunning) return;
             _isRunning = true;
-            Random random = new Random();
+            //Random random = new Random();
+            int iter = 0;
 
             foreach (IBall ball in Balls)
             {
                 ball.Velocity = new Vector2(nextFloat(-3,3), nextFloat(-3, 3));
+                ball.Id = iter++;
+                ball.StartMoving();
             }
 
             await RunSimulationLoop();
 
         }
 
-        public void Stop()
+        public async void Stop()
         {
             _isRunning = false;
+            foreach (IBall ball in Balls)
+            {
+                ball.StopMoving();
+            }
         }
-
-        /// <summary>
-        /// Zastąpienie użycia pętli w pętli o złożoności O(n^2) strukturą QuadTree, która pozwala na ograniczenie liczby sprawdzanych kolizji
-        /// do kul znajdujących się w najbliższym otoczeniu (średnica * 2) każdej kuli. Dzięki temu złożoność algorytmu może zostać znacznie zredukowana,
-        /// szczególnie przy większej liczbie kul. Osiągnięto przyspieszenie około 4-5 krotne w porównaniu do poprzedniej implementacji. 
-        /// Dla 300 kul frametime spadł z około 11ms do około 2-3ms.
-        /// </summary>
 
         private async Task RunSimulationLoop()
         {
-            // Ustalamy liczbę wątków roboczych na podstawie dostępnych rdzeni procesora
-            int workerCount = Environment.ProcessorCount;
-
-            using (System.IO.StreamWriter writer = new System.IO.StreamWriter("frame_generation_time.txt", append: false))
+            // Ustalamy liczbę wątków na podstawie dostępnych rdzeni procesora
+            int workerCount = Environment.ProcessorCount - 1;
+            StringBuilder sb = new StringBuilder();
+            List<Task> stateTasks = new List<Task>(Balls.Count);
+            while (_isRunning)
             {
-                while (_isRunning)
+                stateTasks.Clear();
+                foreach (IBall ball in Balls)
                 {
-                    var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                    stateTasks.Add(Task.Run(() => ball.StopMoving()));
+                }
+                await Task.WhenAll(stateTasks);
 
-                    QuadTree tree = new QuadTree(Balls);
+                System.Diagnostics.Stopwatch stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-                    List<Task> workers = new List<Task>(workerCount);
+                QuadTree tree = new QuadTree(Balls);
 
-                    int ballsPerWorker = Balls.Count / workerCount;
+                List<Task> workers = new List<Task>(workerCount); // worker pool
 
-                    for (int w = 0; w < workerCount; w++)
+                int ballsPerWorker = Balls.Count / workerCount;
+
+                for (int w = 0; w < workerCount; w++)
+                {
+                    int startIndex = w * ballsPerWorker;
+                    int endIndex = (w == workerCount - 1) ? Balls.Count : startIndex + ballsPerWorker;
+
+                    workers.Add(Task.Run(() =>
                     {
-                        int startIndex = w * ballsPerWorker;
-                        int endIndex = (w == workerCount - 1) ? Balls.Count : startIndex + ballsPerWorker;
-
-                        workers.Add(Task.Run(() =>
+                        List<IBall> nearbyBalls = new List<IBall>();
+                        for (int i = startIndex; i < endIndex; i++)
                         {
-                            for (int i = startIndex; i < endIndex; i++)
+                            nearbyBalls.Clear();
+                            IBall ball1 = Balls[i];
+
+                            float searchRadius = _diameter * 2;
+                            Rect2D searchRange = new Rect2D(
+                                ball1.Position.X - searchRadius,
+                                ball1.Position.Y - searchRadius,
+                                searchRadius * 2,
+                                searchRadius * 2);
+
+                            tree.Query(searchRange, nearbyBalls);
+
+                            foreach (IBall ball2 in nearbyBalls)
                             {
-                                IBall ball1 = Balls[i];
+                                int hash1 = ball1.Id;
+                                int hash2 = ball2.Id;
+                                if (hash1 >= hash2) continue;
 
-                                float searchRadius = _diameter * 2;
-                                Rect2D searchRange = new Rect2D(
-                                    ball1.Position.X - searchRadius,
-                                    ball1.Position.Y - searchRadius,
-                                    searchRadius * 2,
-                                    searchRadius * 2);
+                                IBall lock1 = hash1 < hash2 ? ball1 : ball2;
+                                IBall lock2 = hash1 < hash2 ? ball2 : ball1;
 
-                                List<IBall> nearbyBalls = new List<IBall>();
-                                tree.Query(searchRange, nearbyBalls);
+                                float radius = _diameter / 2;
+                                Vector2 Center1 = ball1.Position + new Vector2(radius, radius);
+                                Vector2 Center2 = ball2.Position + new Vector2(radius, radius);
 
-                                foreach (IBall ball2 in nearbyBalls)
+                                float distance = Vector2.Distance(Center1, Center2);
+
+                                if (distance == 0) distance = 0.01f;
+
+                                if (distance <= _diameter)
                                 {
-                                    int hash1 = ball1.GetHashCode();
-                                    int hash2 = ball2.GetHashCode();
-                                    if (hash1 >= hash2) continue;
-
-                                    IBall lock1 = hash1 < hash2 ? ball1 : ball2;
-                                    IBall lock2 = hash1 < hash2 ? ball2 : ball1;
-
-                                    float radius = _diameter / 2;
-                                    Vector2 Center1 = ball1.Position + new Vector2(radius, radius);
-                                    Vector2 Center2 = ball2.Position + new Vector2(radius, radius);
-
-                                    float distance = Vector2.Distance(Center1, Center2);
-
-                                    if (distance == 0) distance = 0.01f;
-
-                                    if (distance <= _diameter)
+                                    Vector2 normal = Vector2.Normalize(Center1 - Center2);
+                                    lock (lock1)
                                     {
-                                        Vector2 normal = Vector2.Normalize(Center1 - Center2);
-                                        lock (lock1)
+                                        lock (lock2)
                                         {
-                                            lock (lock2)
+                                            Vector2 dV = ball1.Velocity - ball2.Velocity;
+                                            if (Vector2.Dot(dV, normal) < 0)
                                             {
-                                                Vector2 dV = ball1.Velocity - ball2.Velocity;
-                                                if (Vector2.Dot(dV, normal) < 0)
-                                                {
-                                                    Vector2 collisionResponse = Vector2.Dot(dV, normal) * normal;
-                                                    ball1.Velocity -= collisionResponse;
-                                                    ball2.Velocity += collisionResponse;
-                                                }
+                                                Vector2 collisionResponse = Vector2.Dot(dV, normal) * normal;
+                                                ball1.Velocity -= collisionResponse;
+                                                ball2.Velocity += collisionResponse;
                                             }
                                         }
                                     }
                                 }
-                           
                             }
-                        }));
-                    }
+                        }
+                    }));
+                }
 
-                    // 3. Czekamy (bariera), aż wszystkie wątki skończą przetwarzać swoje pule
-                    await Task.WhenAll(workers);
+                await Task.WhenAll(workers); // Bariera 2 - czekamy aż wszystkie odbicia zostaną policzone
 
-                    // Aktualizacja pozycji
-                    foreach (IBall ball in Balls)
-                    {
-                        //ball.Velocity = ball.NextVelocity;
-                        moveIfLegal(ball);
-                    }
+                stateTasks.Clear();
 
-                    stopwatch.Stop();
-                    await writer.WriteLineAsync(stopwatch.Elapsed.TotalMilliseconds.ToString());
+                foreach (IBall ball in Balls)
+                {
+                    stateTasks.Add(Task.Run(() => ball.StartMoving()));
+                }
+                //await Task.WhenAll(stateTasks);
 
-                    int delay = 16 - (int)stopwatch.Elapsed.TotalMilliseconds;
-                    if (delay > 0)
-                    {
-                        await Task.Delay(delay);
-                    }
+                stopwatch.Stop();
+                sb.AppendLine(stopwatch.Elapsed.TotalMilliseconds.ToString());
+
+                int delay = 16 - (int)stopwatch.Elapsed.TotalMilliseconds;
+                if (delay > 0)
+                {
+                    await Task.Delay(delay);
                 }
             }
+        System.IO.File.WriteAllText("frame_generation_time.txt", sb.ToString());
+
         }
-
-        public void moveIfLegal(IBall ball)
-        {
-            Vector2 tempPostition = Vector2.Add(ball.Position, ball.Velocity);
-
-            if (tempPostition.X < 0 || tempPostition.X > 560 - _diameter)
-            {
-                ball.Velocity = new Vector2(-ball.Velocity.X, ball.Velocity.Y);
-            }
-
-            if (tempPostition.Y < 0 || tempPostition.Y > 280 - _diameter)
-            {
-                ball.Velocity = new Vector2(ball.Velocity.X, -ball.Velocity.Y);
-            }
-
-            ball.Position = Vector2.Add(ball.Position, ball.Velocity);
-        }
-
         public float nextFloat(int from, int to)
         {
             Random random = new Random();
@@ -268,6 +260,20 @@ namespace Logic
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Y"));
 
             }
+        }
+
+        public void StartMoving()
+        {
+            _dataBall.StartMoving();
+        }
+        public void StopMoving()
+        {
+            _dataBall.StopMoving();
+        }
+        public int Id
+        {
+            get => _dataBall.Id;
+            set => _dataBall.Id = value;
         }
     }
     public struct Rect2D
