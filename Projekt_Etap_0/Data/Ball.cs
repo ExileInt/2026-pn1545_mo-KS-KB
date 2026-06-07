@@ -2,6 +2,7 @@
 using System;
 using System.ComponentModel;
 using System.Numerics;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -93,6 +94,7 @@ public class Ball : INotifyPropertyChanged, IDataBall
         }
         set
         {
+            LogVelocity(value, _velocity, this);
             _lock.EnterWriteLock();
             try { _velocity = value; }
             finally { _lock.ExitWriteLock(); }
@@ -100,6 +102,18 @@ public class Ball : INotifyPropertyChanged, IDataBall
     }
 
     int IDataBall.Diameter => _diameter;
+
+    private static readonly object _fileLogLock = new object();
+
+    protected void LogVelocity(Vector2 velocity, Vector2 oldVelocity, Ball ball)
+    {
+        StringBuilder logEntry = new StringBuilder();
+        logEntry.AppendLine($"Ball ID: {ball.Id}, velocity changed from {oldVelocity} to {velocity}\n");
+        lock (_fileLogLock)
+        {
+            System.IO.File.AppendAllText("velocity_log.txt", logEntry.ToString());
+        }
+    }
 
     public void StartMoving()
     {
