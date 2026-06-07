@@ -114,7 +114,16 @@ namespace Logic
             // Ustalamy liczbę wątków na podstawie dostępnych rdzeni procesora
             int workerCount = Environment.ProcessorCount - 1;
             StringBuilder sb = new StringBuilder();
+            StringBuilder diagnosticString = new StringBuilder();
             List<Task> stateTasks = new List<Task>(Balls.Count);
+            diagnosticString.AppendLine("---- Initial Data on Balls ----");
+            foreach (IBall ball in Balls)
+            {
+                diagnosticString.AppendLine($"Ball {ball.Id} Position: {ball.Position}, Velocity: {ball.Velocity}");
+            }
+            diagnosticString.AppendLine("---- Detected Collisions ----");
+
+
             while (_isRunning)
             {
                 stateTasks.Clear();
@@ -181,10 +190,14 @@ namespace Logic
                                             Vector2 dV = ball1.Velocity - ball2.Velocity;
                                             if (Vector2.Dot(dV, normal) < 0)
                                             {
+                                                diagnosticString.AppendLine($"Collision: Ball {ball1.Id}, Ball {ball2.Id}");
+                                                diagnosticString.AppendLine($"Ball {ball1.Id} Old Velocity: {ball1.Velocity}, Ball {ball2.Id} Old Velocity: {ball2.Velocity}");
                                                 Vector2 collisionResponse = Vector2.Dot(dV, normal) * normal;
                                                 ball1.Velocity -= collisionResponse;
                                                 ball2.Velocity += collisionResponse;
+                                                diagnosticString.AppendLine($"Ball {ball1.Id} New Velocity: {ball1.Velocity}, Ball {ball2.Id} New Velocity: {ball2.Velocity}\n");
                                             }
+
                                         }
                                     }
                                 }
@@ -212,8 +225,8 @@ namespace Logic
                     await Task.Delay(delay);
                 }
             }
-        System.IO.File.WriteAllText("frame_generation_time.txt", sb.ToString());
-
+            System.IO.File.WriteAllText("frame_generation_time.txt", sb.ToString());
+            System.IO.File.WriteAllText("diagnostic_log.txt", diagnosticString.ToString());
         }
         public float nextFloat(int from, int to)
         {
