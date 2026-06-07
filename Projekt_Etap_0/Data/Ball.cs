@@ -11,6 +11,26 @@ public class Ball : INotifyPropertyChanged, IDataBall
     private Vector2 _position;
     private Vector2 _velocity;
     private CancellationTokenSource _cts;
+    private DateTime _lastColorChangeTime = DateTime.Now;
+
+    private string _color = "Red";
+    public string Color
+    {
+        get
+        {
+            _lock.EnterReadLock();
+            try { return _color; }
+            finally { _lock.ExitReadLock(); }
+        }
+        set
+        {
+            _lock.EnterWriteLock();
+            try { _color = value; }
+            finally { _lock.ExitWriteLock(); }
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Color"));
+        }
+    }
+
     private int _id = 0;
     public int Id
     {
@@ -88,11 +108,23 @@ public class Ball : INotifyPropertyChanged, IDataBall
 
         Task.Run(async () =>
         {
+            string[] colors = new string[] { "Red", "Blue", "Yellow", "Purple" };
+
             while (!token.IsCancellationRequested)
             {
                 moveIfLegal(this);
-                _cts?.Cancel();
-                await Task.Delay(16);
+
+                if ((DateTime.Now - _lastColorChangeTime).TotalMilliseconds >= 5000)
+                {
+                    int colorIndex = Array.IndexOf(colors, Color);
+                    if (colorIndex == -1) colorIndex = 0;
+
+                    colorIndex = (colorIndex + 1) % colors.Length;
+                    Color = colors[colorIndex];
+                    _lastColorChangeTime = DateTime.Now;
+                }
+
+                await Task.Delay(16, token).ContinueWith(t => { });
             }
         }, token);
     }

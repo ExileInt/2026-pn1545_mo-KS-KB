@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using System.Threading;
 using System.Linq;
 using System.Text;
+using System.Drawing;
 
 
 
@@ -229,6 +230,7 @@ namespace Logic
 
         public event PropertyChangedEventHandler PropertyChanged;
 
+        public string Color => _dataBall.Color;
         public Vector2 Position 
         { 
             get { return _dataBall.Position; }
@@ -258,7 +260,10 @@ namespace Logic
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Position"));
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("X"));
                 PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Y"));
-
+            }
+            else if (e.PropertyName == "Color")
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Color"));
             }
         }
 

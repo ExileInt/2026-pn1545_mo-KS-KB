@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Drawing;
 using System.Numerics;
 using System.Text;
 using System.Threading;
@@ -17,6 +18,7 @@ namespace Data
         void StopMoving();
 
         int Id { get; set; }
+        string Color { get; }
 
     }
 }

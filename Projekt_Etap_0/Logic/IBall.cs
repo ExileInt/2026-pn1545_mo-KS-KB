@@ -17,5 +17,6 @@ namespace Logic
         void StopMoving();
 
         int Id { get; set; }
+        string Color { get; }
     }
 }
